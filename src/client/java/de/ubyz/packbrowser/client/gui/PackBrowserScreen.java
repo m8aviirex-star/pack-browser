@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -57,7 +58,7 @@ public class PackBrowserScreen extends Screen {
 	private @Nullable String error;
 	private long searchDueAt;
 	private int requestSeq;
-	private @Nullable ModrinthApi.Hit selected;
+	private ModrinthApi.@Nullable Hit selected;
 	private @Nullable Component flash;
 	private long flashUntil;
 
@@ -135,7 +136,7 @@ public class PackBrowserScreen extends Screen {
 						button -> {
 							if (this.selected != null) {
 								ConfirmLinkScreen.confirmLinkNow(this,
-										"https://modrinth.com/resourcepack/" + this.selected.slug(), true);
+										URI.create("https://modrinth.com/resourcepack/" + this.selected.slug()), true);
 							}
 						})
 				.pos(fx + footerWidth + footerGap, fy).size(footerWidth, 20)
@@ -214,7 +215,7 @@ public class PackBrowserScreen extends Screen {
 
 	// ---------------------------------------------------------------- download
 
-	void onSelected(@Nullable ModrinthApi.Hit hit) {
+	void onSelected(ModrinthApi.@Nullable Hit hit) {
 		this.selected = hit;
 		this.updateButtons();
 	}
