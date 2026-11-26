@@ -1,5 +1,9 @@
 package de.ubyz.packbrowser.client;
 
+import com.mojang.blaze3d.Blaze3D;
+import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -36,6 +40,9 @@ public final class LinkImports {
 		public volatile int batchIndex;
 		public volatile int skipped;
 		public volatile int failed;
+		// opened in the browser (auto import watches the Downloads folder)
+		public volatile boolean browser;
+		public volatile String site = "";
 
 		Job(String url) {
 			this.url = url;
@@ -50,8 +57,25 @@ public final class LinkImports {
 		}
 	}
 
-	/** Pages that show a download button instead of being the file itself. */
-	private static final String[] PAGE_HOSTS = {"pvprp.com", "planetminecraft.com", "curseforge.com", "youtube.com", "youtu.be"};
+	/** Sites where the download has to happen in the browser (ads, link lockers, creator support, API rules). */
+	private static final String[][] BROWSER_SITES = {
+			{"pvprp.com", "PvPRP"},
+			{"curseforge.com", "CurseForge"},
+			{"packsmc.com", "PacksMC"},
+			{"planetminecraft.com", "Planet Minecraft"},
+			{"youtube.com", "YouTube"},
+			{"youtu.be", "YouTube"},
+			{"resourcepack.net", "ResourcePack.net"},
+			{"mcpedl.com", "MCPEDL"},
+			{"9minecraft.net", "9Minecraft"}
+	};
+
+	/** Thrown when a link returns a web page instead of a file. */
+	static final class WebPageException extends IOException {
+		WebPageException() {
+			super("Webseite statt Datei");
+		}
+	}
 
 	private static final List<Job> JOBS = new CopyOnWriteArrayList<>();
 
@@ -95,21 +119,82 @@ public final class LinkImports {
 			return job;
 		}
 
+		String browserSite = browserSite(uri);
+		if (browserSite != null) {
+			openInBrowser(job, uri, browserSite);
+			return job;
+		}
+
 		if (MediaFire.isSharePage(uri)) {
 			MEDIAFIRE.execute(() -> runMediaFire(job, uri));
 			return job;
 		}
 
+		String modrinthSlug = modrinthSlug(uri);
 		ModrinthApi.executor().execute(() -> {
 			try {
-				List<String> files = downloadAndInstall(job, uri, true);
+				URI target = uri;
+				if (modrinthSlug != null) {
+					ModrinthApi.PackFile file = ModrinthApi.resolveFile(modrinthSlug, PackBrowserClient.gameVersion()).join();
+					target = URI.create(file.url());
+				}
+				List<String> files = downloadAndInstall(job, target, true);
 				finish(job, files);
+			} catch (WebPageException page) {
+				// unknown site with a download page -> let the user download it in the browser
+				openInBrowser(job, uri, uri.getHost());
 			} catch (Exception e) {
 				fail(job, Downloads.message(e));
 				PackBrowserClient.LOGGER.warn("Link import failed: {}", job.url, e);
 			}
 		});
 		return job;
+	}
+
+	/** Opens the page in the normal browser and starts watching the Downloads folder. */
+	public static void openInBrowser(Job job, URI uri, String siteName) {
+		job.browser = true;
+		job.site = siteName;
+		job.fileName = siteName;
+		AutoImport.arm(siteName);
+		Minecraft.getInstance().execute(() -> {
+			try {
+				Blaze3D.openUri(uri);
+			} catch (Exception e) {
+				PackBrowserClient.LOGGER.warn("Could not open {}", uri, e);
+			}
+		});
+		job.phase = Phase.DONE;
+	}
+
+	/** Opens a site's texture pack section (buttons in the link tab). */
+	public static Job openSite(String siteName, String url) {
+		Job job = new Job(url);
+		JOBS.add(0, job);
+		while (JOBS.size() > 15) {
+			JOBS.remove(JOBS.size() - 1);
+		}
+		openInBrowser(job, URI.create(url), siteName);
+		return job;
+	}
+
+	private static @Nullable String browserSite(URI u) {
+		String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
+		for (String[] site : BROWSER_SITES) {
+			if (host.equals(site[0]) || host.endsWith("." + site[0])) {
+				return site[1];
+			}
+		}
+		return null;
+	}
+
+	private static @Nullable String modrinthSlug(URI u) {
+		String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
+		if (!host.equals("modrinth.com") && !host.equals("www.modrinth.com")) {
+			return null;
+		}
+		Matcher m = Pattern.compile("^/(?:resourcepack|project|mod|datapack|shader)/([^/?#]+)").matcher(u.getRawPath() == null ? "" : u.getRawPath());
+		return m.find() ? m.group(1) : null;
 	}
 
 	// --------------------------------------------------------------- MediaFire
@@ -251,7 +336,7 @@ public final class LinkImports {
 		}
 		String start = new String(head, java.nio.charset.StandardCharsets.ISO_8859_1).trim();
 		if (start.startsWith("<") || contentType.toLowerCase(Locale.ROOT).contains("html")) {
-			throw new IOException("Das ist eine Webseite, kein direkter Download-Link. Lade den Pack im Browser runter und nimm den Tab „Aus Downloads“.");
+			throw new WebPageException();
 		}
 		throw new IOException("Das ist keine ZIP-Datei");
 	}
@@ -274,16 +359,6 @@ public final class LinkImports {
 		String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
 		if (host.isEmpty()) {
 			throw new IllegalArgumentException("Ungültiger Link");
-		}
-
-		if (host.equals("modrinth.com") || host.equals("www.modrinth.com")) {
-			throw new IllegalArgumentException("Modrinth-Packs findest du direkt im Tab „Modrinth“");
-		}
-		for (String page : PAGE_HOSTS) {
-			if (host.equals(page) || host.equals("www." + page) || (page.startsWith("youtu") && host.endsWith("." + page))) {
-				throw new IllegalArgumentException("Das ist eine Webseite mit Download-Knopf, kein direkter Link. "
-						+ "Lade den Pack dort im Browser runter und nimm dann den Tab „Aus Downloads“.");
-			}
 		}
 
 		// Dropbox share link -> direct download

@@ -16,9 +16,9 @@ Für Seiten mit Download-Knopf (PvPRP, Planet Minecraft, CurseForge …): Pack g
 - Der Ordner ist einstellbar (Standard: dein Downloads-Ordner).
 
 ### Link einfügen
-Download-Link einfügen und Enter drücken (auch mehrere Links auf einmal).
-- **MediaFire**: Datei-Links und ganze **Ordner** – alle ZIPs im Ordner (inkl. Unterordner) werden nacheinander geladen.
-- GitHub, Dropbox, Google Drive, Discord und alle Links, die direkt eine .zip laden.
+Link einfügen und Enter drücken (auch mehrere Links auf einmal).
+- **Sofort geladen:** MediaFire-Dateien und ganze **MediaFire-Ordner** (Massen-Download inkl. Unterordner), Modrinth-Links, GitHub, Dropbox, Google Drive, Discord und alle direkten .zip-Links.
+- **PvPRP, CurseForge, PacksMC, Planet Minecraft, YouTube** und andere Seiten mit Download-Knopf öffnen sich im Browser (oder oben auf eine der Seiten klicken). Was du dort herunterlädst, wird **automatisch importiert**, solange der Auto-Import läuft (10 Minuten, verlängert sich nach jedem Download).
 
 Danach mit **Fertig** zurück und den Pack links in der Liste aktivieren.
 

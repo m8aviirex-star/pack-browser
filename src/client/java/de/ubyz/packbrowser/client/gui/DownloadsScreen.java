@@ -194,6 +194,10 @@ public class DownloadsScreen extends BaseBrowserScreen {
 
 	@Override
 	protected Component status() {
+		if (de.ubyz.packbrowser.client.AutoImport.armed()) {
+			return Component.translatable("packbrowser.link.auto",
+					LinkScreen.clock(de.ubyz.packbrowser.client.AutoImport.secondsLeft())).withStyle(ChatFormatting.AQUA);
+		}
 		if (this.scanning && !this.scannedOnce) {
 			return Component.translatable("packbrowser.local.scanning").withStyle(ChatFormatting.GRAY);
 		}
