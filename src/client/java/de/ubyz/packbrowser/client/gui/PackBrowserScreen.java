@@ -24,12 +24,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class PackBrowserScreen extends Screen {
+/** Tab 1: search and download resource packs from Modrinth. */
+public class PackBrowserScreen extends BaseBrowserScreen {
 	private static final String[] SORTS = {"relevance", "downloads", "follows", "newest", "updated"};
 	private static final String[] CATEGORIES = {"", "combat", "simplistic", "vanilla-like", "realistic", "themed",
 			"tweaks", "utility", "decoration", "cursed", "8x-", "16x", "32x", "64x", "128x", "256x", "512x+"};
 	private static final int PAGE_SIZE = 30;
-	private static final int LIST_TOP = 46;
 
 	// remembered while the game is running
 	private static String lastQuery = "";
@@ -37,7 +37,6 @@ public class PackBrowserScreen extends Screen {
 	private static int lastSort = 0;
 	private static int lastCategory = 0;
 
-	private final Screen parent;
 	private final String gameVersion = PackBrowserClient.gameVersion();
 	private final List<ModrinthApi.Hit> results = new ArrayList<>();
 	private final Map<String, Downloads.State> watching = new LinkedHashMap<>();
@@ -59,22 +58,21 @@ public class PackBrowserScreen extends Screen {
 	private long searchDueAt;
 	private int requestSeq;
 	private ModrinthApi.@Nullable Hit selected;
-	private @Nullable Component flash;
-	private long flashUntil;
 
 	public PackBrowserScreen(Screen parent) {
-		super(Component.translatable("packbrowser.title"));
-		this.parent = parent;
+		super(parent, TAB_MODRINTH);
 	}
 
 	@Override
 	protected void init() {
+		this.addTabs();
+
 		int gap = 4;
-		int controlsWidth = Math.min(this.width - 12, 560);
-		int left = (this.width - controlsWidth) / 2;
+		int controlsWidth = this.controlsWidth();
+		int left = this.controlsLeft();
 		int buttonWidth = Math.max(60, Math.min(112, (controlsWidth - 110 - 3 * gap) / 3));
 		int searchWidth = controlsWidth - 3 * (buttonWidth + gap);
-		int y = 20;
+		int y = CONTROLS_Y;
 
 		this.searchBox = new EditBox(this.font, left, y, searchWidth, 20, this.searchBox,
 				Component.translatable("packbrowser.search"));
@@ -116,34 +114,25 @@ public class PackBrowserScreen extends Screen {
 				.tooltip(Tooltip.create(Component.translatable("packbrowser.category.tooltip")))
 				.build());
 
-		this.list = new PackList(this.minecraft, this.width, this.height - LIST_TOP - 52, LIST_TOP, 36, this);
+		this.list = new PackList(this.minecraft, this.width, this.listHeight(), LIST_TOP, 36, this);
 		this.list.setHits(this.results, this.selected == null ? null : this.selected.id());
 		this.addRenderableWidget(this.list);
 
-		int footerGap = 6;
-		int footerWidth = Math.min(130, (this.width - 16 - 2 * footerGap) / 3);
-		int fx = this.width / 2 - (3 * footerWidth + 2 * footerGap) / 2;
-		int fy = this.height - 26;
-		this.downloadButton = this.addRenderableWidget(Button.builder(Component.translatable("packbrowser.download"),
-						button -> {
-							if (this.selected != null) {
-								this.startDownload(this.selected);
-							}
-						})
-				.pos(fx, fy).size(footerWidth, 20)
-				.build());
-		this.openButton = this.addRenderableWidget(Button.builder(Component.translatable("packbrowser.open"),
-						button -> {
-							if (this.selected != null) {
-								ConfirmLinkScreen.confirmLinkNow(this,
-										URI.create("https://modrinth.com/resourcepack/" + this.selected.slug()), true);
-							}
-						})
-				.pos(fx + footerWidth + footerGap, fy).size(footerWidth, 20)
-				.build());
-		this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> this.onClose())
-				.pos(fx + 2 * (footerWidth + footerGap), fy).size(footerWidth, 20)
-				.build());
+		Button[] footer = this.addFooter(
+				button("packbrowser.download", b -> {
+					if (this.selected != null) {
+						this.startDownload(this.selected);
+					}
+				}),
+				button("packbrowser.open", b -> {
+					if (this.selected != null) {
+						ConfirmLinkScreen.confirmLinkNow(this,
+								URI.create("https://modrinth.com/resourcepack/" + this.selected.slug()), true);
+					}
+				}),
+				Button.builder(CommonComponents.GUI_DONE, b -> this.onClose()));
+		this.downloadButton = footer[0];
+		this.openButton = footer[1];
 
 		this.setInitialFocus(this.searchBox);
 		this.updateButtons();
@@ -254,11 +243,6 @@ public class PackBrowserScreen extends Screen {
 		}
 	}
 
-	private void showFlash(Component message) {
-		this.flash = message;
-		this.flashUntil = Util.getMillis() + 7000;
-	}
-
 	@Override
 	public void tick() {
 		super.tick();
@@ -296,10 +280,8 @@ public class PackBrowserScreen extends Screen {
 
 	// ------------------------------------------------------------------ render
 
-	private Component statusLine() {
-		if (this.flash != null && Util.getMillis() < this.flashUntil) {
-			return this.flash;
-		}
+	@Override
+	protected Component status() {
 		if (this.loading) {
 			return Component.translatable("packbrowser.status.loading").withStyle(ChatFormatting.GRAY);
 		}
@@ -312,11 +294,9 @@ public class PackBrowserScreen extends Screen {
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
 		super.extractRenderState(graphics, mouseX, mouseY, delta);
-		graphics.centeredText(this.font, this.title, this.width / 2, 7, 0xFFFFFFFF);
-		graphics.centeredText(this.font, this.statusLine(), this.width / 2, this.height - 40, 0xFFFFFFFF);
 
 		if (this.results.isEmpty() && this.loadedOnce && !this.loading) {
-			int cy = LIST_TOP + (this.height - LIST_TOP - 52) / 2 - 10;
+			int cy = LIST_TOP + this.listHeight() / 2 - 10;
 			if (this.error != null) {
 				graphics.centeredText(this.font, Component.translatable("packbrowser.empty.error"), this.width / 2, cy, 0xFFFF5555);
 			} else {
@@ -329,11 +309,10 @@ public class PackBrowserScreen extends Screen {
 	}
 
 	@Override
-	public void onClose() {
+	protected void saveState() {
 		lastQuery = this.query;
 		lastOnlyCurrent = this.onlyCurrent;
 		lastSort = this.sort;
 		lastCategory = this.category;
-		this.minecraft.gui.setScreen(this.parent);
 	}
 }

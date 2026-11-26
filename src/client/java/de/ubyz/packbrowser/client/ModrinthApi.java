@@ -245,6 +245,82 @@ public final class ModrinthApi {
 				}, EXECUTOR);
 	}
 
+	// ------------------------------------------------------- any direct link
+
+	public record Fetched(Path file, String fileName, String contentType) {
+	}
+
+	private static final long MAX_LINK_SIZE = 1024L * 1024 * 1024;
+
+	/** Downloads any URL into a temp file (used for "Link einfügen"). */
+	public static CompletableFuture<Fetched> fetchToTemp(URI uri, LongConsumer progress, LongConsumer totalSize) {
+		HttpRequest req = HttpRequest.newBuilder(uri)
+				.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PackBrowser/" + PackBrowserClient.modVersion())
+				.timeout(Duration.ofMinutes(10))
+				.GET()
+				.build();
+		return HTTP.sendAsync(req, HttpResponse.BodyHandlers.ofInputStream()).thenApplyAsync(resp -> {
+			Path tmp = null;
+			try {
+				if (resp.statusCode() != 200) {
+					resp.body().close();
+					throw new IOException("HTTP " + resp.statusCode());
+				}
+				long total = resp.headers().firstValueAsLong("Content-Length").orElse(-1L);
+				if (total > MAX_LINK_SIZE) {
+					resp.body().close();
+					throw new IOException("Datei ist größer als 1 GB");
+				}
+				totalSize.accept(total);
+				tmp = Files.createTempFile("packbrowser-link-", ".tmp");
+				try (InputStream in = resp.body(); OutputStream out = Files.newOutputStream(tmp)) {
+					byte[] buf = new byte[1 << 16];
+					long done = 0;
+					int n;
+					while ((n = in.read(buf)) != -1) {
+						out.write(buf, 0, n);
+						done += n;
+						if (done > MAX_LINK_SIZE) {
+							throw new IOException("Datei ist größer als 1 GB");
+						}
+						progress.accept(done);
+					}
+				}
+				String type = resp.headers().firstValue("Content-Type").orElse("");
+				return new Fetched(tmp, fileNameFrom(resp), type);
+			} catch (Exception e) {
+				if (tmp != null) {
+					try {
+						Files.deleteIfExists(tmp);
+					} catch (IOException ignored) {
+					}
+				}
+				throw new CompletionException(e);
+			}
+		}, EXECUTOR);
+	}
+
+	private static String fileNameFrom(HttpResponse<?> resp) {
+		String cd = resp.headers().firstValue("Content-Disposition").orElse("");
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("filename\\*=(?:UTF-8|utf-8)''([^;]+)").matcher(cd);
+		if (m.find()) {
+			return java.net.URLDecoder.decode(m.group(1).trim(), StandardCharsets.UTF_8);
+		}
+		m = java.util.regex.Pattern.compile("filename=\"?([^\";]+)\"?").matcher(cd);
+		if (m.find()) {
+			return m.group(1).trim();
+		}
+		String path = resp.uri().getPath();
+		if (path != null) {
+			int slash = path.lastIndexOf('/');
+			String last = slash >= 0 ? path.substring(slash + 1) : path;
+			if (!last.isBlank()) {
+				return java.net.URLDecoder.decode(last.replace("+", "%2B"), StandardCharsets.UTF_8);
+			}
+		}
+		return "pack.zip";
+	}
+
 	// ----------------------------------------------------------------- helpers
 
 	private static JsonArray single(String value) {

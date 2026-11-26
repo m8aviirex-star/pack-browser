@@ -4,16 +4,21 @@ Durchsuche Texturepacks von [Modrinth](https://modrinth.com/resourcepacks) direk
 
 ## Benutzung
 
-1. **Optionen → Ressourcenpakete** öffnen.
-2. Oben links auf **Pack Browser** klicken.
-3. Suchen, filtern (Version, Sortierung, Kategorie/Auflösung) und einen Pack auswählen.
-4. **Herunterladen** klicken (oder Doppelklick auf den Pack). Die Datei landet direkt in `.minecraft/resourcepacks`.
-5. Mit **Fertig** zurück: Der neue Pack steht links in der Liste und kann aktiviert werden.
+**Optionen → Ressourcenpakete** öffnen und oben links auf **Pack Browser** klicken. Oben gibt es drei Tabs:
 
-- **Nur 26.3 / Alle Versionen**: Zeigt nur Packs, die für deine Minecraft-Version markiert sind, oder alle Packs.
-- Gibt es keine Datei für deine Version, wird die neueste Version geladen, und du bekommst einen Hinweis.
-- Jeder Download wird per SHA-1-Prüfsumme kontrolliert.
-- Shift-Klick auf Sortierung oder Kategorie blättert rückwärts.
+### Modrinth
+Packs von Modrinth suchen, filtern (Version, Sortierung, Kategorie/Auflösung) und mit **Herunterladen** oder Doppelklick direkt in `resourcepacks` laden. Jeder Download wird per SHA-1 geprüft.
+
+### Aus Downloads
+Für Seiten mit Download-Knopf (PvPRP, Planet Minecraft, CurseForge, MediaFire …): Pack ganz normal im Browser runterladen, er taucht hier automatisch auf. Doppelklick = importieren.
+- Zeigt Bild, Beschreibung und für welche Minecraft-Version der Pack gemacht ist (alte 1.8-Packs werden markiert).
+- ZIPs mit mehreren Packs oder einem Unterordner werden automatisch richtig entpackt.
+- Der Ordner ist einstellbar (Standard: dein Downloads-Ordner).
+
+### Link einfügen
+Direkten Download-Link einfügen und Enter drücken. Klappt mit GitHub, Dropbox, Google Drive, Discord und allen Links, die direkt eine .zip laden.
+
+Danach mit **Fertig** zurück und den Pack links in der Liste aktivieren.
 
 ## Voraussetzungen
 

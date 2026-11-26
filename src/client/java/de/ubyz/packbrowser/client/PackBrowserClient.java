@@ -1,6 +1,6 @@
 package de.ubyz.packbrowser.client;
 
-import de.ubyz.packbrowser.client.gui.PackBrowserScreen;
+import de.ubyz.packbrowser.client.gui.BaseBrowserScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
@@ -33,7 +33,7 @@ public class PackBrowserClient implements ClientModInitializer {
 		}
 
 		Button open = Button.builder(Component.translatable("packbrowser.button"),
-						button -> client.gui.setScreen(new PackBrowserScreen(screen)))
+						button -> client.gui.setScreen(BaseBrowserScreen.create(BaseBrowserScreen.lastTab, screen)))
 				.pos(4, 4)
 				.size(84, 20)
 				.tooltip(Tooltip.create(Component.translatable("packbrowser.button.tooltip")))

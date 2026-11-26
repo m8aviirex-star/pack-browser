@@ -12,7 +12,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Remembers which Modrinth project was saved under which file name. */
+/** Remembers which Modrinth project / local file was saved under which file name(s), separated by "|". */
 public final class InstalledPacks {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static final Map<String, String> FILES = new HashMap<>();
@@ -45,8 +45,16 @@ public final class InstalledPacks {
 
 	public static synchronized boolean isInstalled(String projectId) {
 		ensureLoaded();
-		String name = FILES.get(projectId);
-		return name != null && Files.exists(PackBrowserClient.resourcePackDir().resolve(name));
+		String names = FILES.get(projectId);
+		if (names == null) {
+			return false;
+		}
+		for (String name : names.split("\\|")) {
+			if (!name.isEmpty() && Files.exists(PackBrowserClient.resourcePackDir().resolve(name))) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static synchronized void markInstalled(String projectId, String fileName) {

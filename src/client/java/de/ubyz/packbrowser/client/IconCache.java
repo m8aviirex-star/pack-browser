@@ -46,6 +46,20 @@ public final class IconCache {
 		return null;
 	}
 
+	/** Icon from raw image bytes (e.g. pack.png inside a downloaded zip). */
+	public static @Nullable Identifier getLocal(String key, byte @Nullable [] data) {
+		Identifier id = LOADED.get(key);
+		if (id != null) {
+			return id;
+		}
+		if (data != null && data.length > 0 && REQUESTED.add(key)) {
+			java.util.concurrent.CompletableFuture.supplyAsync(() -> toPng(data), ModrinthApi.executor())
+					.thenAccept(png -> Minecraft.getInstance().execute(() -> register(key, png)))
+					.exceptionally(err -> null);
+		}
+		return null;
+	}
+
 	private static void register(String projectId, byte[] png) {
 		try {
 			NativeImage image = NativeImage.read(new ByteArrayInputStream(png));
@@ -60,6 +74,9 @@ public final class IconCache {
 
 	private static String textureName(String projectId) {
 		String clean = projectId.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_.-]", "_");
+		if (clean.length() > 40) {
+			clean = clean.substring(clean.length() - 40);
+		}
 		return clean + "_" + Integer.toHexString(projectId.hashCode());
 	}
 
