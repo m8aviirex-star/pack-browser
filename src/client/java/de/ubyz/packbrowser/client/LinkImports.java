@@ -6,14 +6,17 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** "Link einfügen": downloads a pasted link and installs the pack(s) inside. */
+/** "Link einfügen": downloads pasted links (incl. MediaFire files and folders) and installs the packs inside. */
 public final class LinkImports {
 	public enum Phase { DOWNLOADING, INSTALLING, DONE, FAILED }
 
@@ -27,6 +30,12 @@ public final class LinkImports {
 		public volatile List<String> files = List.of();
 		public volatile boolean alreadyPresent;
 		public volatile boolean reported;
+		// folder downloads
+		public volatile boolean folder;
+		public volatile int batchTotal;
+		public volatile int batchIndex;
+		public volatile int skipped;
+		public volatile int failed;
 
 		Job(String url) {
 			this.url = url;
@@ -35,13 +44,23 @@ public final class LinkImports {
 		public boolean running() {
 			return this.phase == Phase.DOWNLOADING || this.phase == Phase.INSTALLING;
 		}
+
+		public int percent() {
+			return this.total > 0 ? (int) Math.min(100, this.done * 100 / this.total) : -1;
+		}
 	}
 
 	/** Pages that show a download button instead of being the file itself. */
-	private static final String[] PAGE_HOSTS = {"pvprp.com", "mediafire.com", "planetminecraft.com", "curseforge.com",
-			"youtube.com", "youtu.be"};
+	private static final String[] PAGE_HOSTS = {"pvprp.com", "planetminecraft.com", "curseforge.com", "youtube.com", "youtu.be"};
 
 	private static final List<Job> JOBS = new CopyOnWriteArrayList<>();
+
+	/** MediaFire jobs run one after another to be gentle with their servers. */
+	private static final ExecutorService MEDIAFIRE = Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "PackBrowser-MediaFire");
+		t.setDaemon(true);
+		return t;
+	});
 
 	private LinkImports() {
 	}
@@ -50,10 +69,21 @@ public final class LinkImports {
 		return JOBS;
 	}
 
+	/** Accepts one or several links (pasted together). */
+	public static List<Job> startAll(String raw) {
+		List<Job> out = new ArrayList<>();
+		for (String part : raw.trim().split("(?=https?://)|\\s+")) {
+			if (!part.isBlank()) {
+				out.add(start(part.trim()));
+			}
+		}
+		return out;
+	}
+
 	public static Job start(String raw) {
 		Job job = new Job(raw.trim());
 		JOBS.add(0, job);
-		while (JOBS.size() > 10) {
+		while (JOBS.size() > 15) {
 			JOBS.remove(JOBS.size() - 1);
 		}
 
@@ -61,40 +91,151 @@ public final class LinkImports {
 		try {
 			uri = normalize(raw);
 		} catch (IllegalArgumentException e) {
-			job.error = e.getMessage();
-			job.phase = Phase.FAILED;
+			fail(job, e.getMessage());
 			return job;
 		}
 
-		ModrinthApi.fetchToTemp(uri, d -> job.done = d, t -> job.total = t)
-				.thenApplyAsync(fetched -> {
-					job.fileName = fetched.fileName();
-					job.phase = Phase.INSTALLING;
-					try {
-						checkIsZip(fetched.file(), fetched.contentType());
-						return PackInstaller.install(fetched.file(), fetched.fileName());
-					} catch (IOException e) {
-						throw new CompletionException(e);
-					} finally {
-						try {
-							Files.deleteIfExists(fetched.file());
-						} catch (IOException ignored) {
-						}
-					}
-				}, ModrinthApi.executor())
-				.whenComplete((result, err) -> {
-					if (err != null) {
-						job.error = Downloads.message(err);
-						job.phase = Phase.FAILED;
-						PackBrowserClient.LOGGER.warn("Link import failed: {}", job.url, err);
-					} else {
-						job.files = result.files();
-						job.alreadyPresent = result.alreadyPresent();
-						InstalledPacks.markInstalled("link:" + job.url, String.join("|", result.files()));
-						job.phase = Phase.DONE;
-					}
-				});
+		if (MediaFire.isSharePage(uri)) {
+			MEDIAFIRE.execute(() -> runMediaFire(job, uri));
+			return job;
+		}
+
+		ModrinthApi.executor().execute(() -> {
+			try {
+				List<String> files = downloadAndInstall(job, uri, true);
+				finish(job, files);
+			} catch (Exception e) {
+				fail(job, Downloads.message(e));
+				PackBrowserClient.LOGGER.warn("Link import failed: {}", job.url, e);
+			}
+		});
 		return job;
+	}
+
+	// --------------------------------------------------------------- MediaFire
+
+	private static void runMediaFire(Job job, URI uri) {
+		try {
+			String folderKey = MediaFire.folderKey(uri);
+			if (folderKey != null) {
+				runFolder(job, folderKey);
+				return;
+			}
+			String fileKey = MediaFire.fileKey(uri);
+			if (fileKey == null) {
+				throw new IOException("Unbekannter MediaFire-Link");
+			}
+			String direct;
+			try {
+				direct = MediaFire.resolveDirect(fileKey);
+			} catch (IOException notAFile) {
+				// old style links (mediafire.com/?key) can also be folders
+				if (uri.getRawQuery() != null) {
+					runFolder(job, fileKey);
+					return;
+				}
+				throw notAFile;
+			}
+			List<String> files = downloadAndInstall(job, URI.create(direct), true);
+			finish(job, files);
+		} catch (Exception e) {
+			fail(job, Downloads.message(e));
+			PackBrowserClient.LOGGER.warn("MediaFire import failed: {}", job.url, e);
+		}
+	}
+
+	private static void runFolder(Job job, String folderKey) throws IOException, InterruptedException {
+		job.folder = true;
+		job.fileName = "MediaFire-Ordner";
+		List<MediaFire.MfFile> all = MediaFire.listFolder(folderKey);
+		List<MediaFire.MfFile> zips = new ArrayList<>();
+		for (MediaFire.MfFile f : all) {
+			if (f.name().toLowerCase(Locale.ROOT).endsWith(".zip")) {
+				zips.add(f);
+			}
+		}
+		job.skipped = all.size() - zips.size();
+		job.batchTotal = zips.size();
+		if (zips.isEmpty()) {
+			throw new IOException(all.isEmpty() ? "Der Ordner ist leer oder privat" : "Im Ordner sind keine .zip-Dateien");
+		}
+
+		List<String> installed = new ArrayList<>();
+		boolean allPresent = true;
+		for (int i = 0; i < zips.size(); i++) {
+			MediaFire.MfFile f = zips.get(i);
+			job.batchIndex = i + 1;
+			job.fileName = f.name();
+			job.done = 0;
+			job.total = f.size() > 0 ? f.size() : -1;
+			job.phase = Phase.DOWNLOADING;
+			try {
+				String direct = MediaFire.resolveDirect(f.quickKey());
+				int before = installed.size();
+				boolean[] present = {false};
+				installed.addAll(downloadAndInstall(job, URI.create(direct), false, present));
+				if (installed.size() > before && !present[0]) {
+					allPresent = false;
+				}
+			} catch (Exception e) {
+				job.failed++;
+				PackBrowserClient.LOGGER.warn("MediaFire file {} failed", f.name(), e);
+			}
+			Thread.sleep(300);
+		}
+		if (installed.isEmpty()) {
+			throw new IOException("Keine der " + zips.size() + " ZIPs war ein Texturepack");
+		}
+		job.alreadyPresent = allPresent;
+		finish(job, installed);
+	}
+
+	// ----------------------------------------------------------------- common
+
+	private static List<String> downloadAndInstall(Job job, URI uri, boolean setName) throws IOException {
+		return downloadAndInstall(job, uri, setName, null);
+	}
+
+	private static List<String> downloadAndInstall(Job job, URI uri, boolean setName, boolean[] presentOut)
+			throws IOException {
+		ModrinthApi.Fetched fetched;
+		try {
+			fetched = ModrinthApi.fetchToTemp(uri, d -> job.done = d, t -> {
+				if (t > 0) {
+					job.total = t;
+				}
+			}).join();
+		} catch (CompletionException e) {
+			Throwable c = e.getCause() != null ? e.getCause() : e;
+			throw c instanceof IOException io ? io : new IOException(Downloads.message(c), c);
+		}
+		if (setName) {
+			job.fileName = fetched.fileName();
+		}
+		job.phase = Phase.INSTALLING;
+		try {
+			checkIsZip(fetched.file(), fetched.contentType());
+			PackInstaller.Result result = PackInstaller.install(fetched.file(), fetched.fileName());
+			if (presentOut != null) {
+				presentOut[0] = result.alreadyPresent();
+			} else {
+				job.alreadyPresent = result.alreadyPresent();
+			}
+			return result.files();
+		} finally {
+			Files.deleteIfExists(fetched.file());
+		}
+	}
+
+	private static void finish(Job job, List<String> files) {
+		job.files = List.copyOf(files);
+		InstalledPacks.markInstalled("link:" + job.url, String.join("|", files));
+		job.phase = Phase.DONE;
+	}
+
+	private static void fail(Job job, String message) {
+		job.error = message;
+		job.phase = Phase.FAILED;
 	}
 
 	private static void checkIsZip(Path file, String contentType) throws IOException {

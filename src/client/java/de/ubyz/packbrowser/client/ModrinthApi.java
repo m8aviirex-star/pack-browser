@@ -32,7 +32,9 @@ import java.util.function.LongConsumer;
 public final class ModrinthApi {
 	private static final String BASE = "https://api.modrinth.com/v2";
 
-	private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(4, r -> {
+	// Our own blocking work (reading streams, unzipping) runs here. The HTTP client keeps its own
+	// internal executor so it can never be starved by these tasks.
+	private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "PackBrowser-IO");
 		t.setDaemon(true);
 		return t;
@@ -41,8 +43,9 @@ public final class ModrinthApi {
 	private static final HttpClient HTTP = HttpClient.newBuilder()
 			.connectTimeout(Duration.ofSeconds(15))
 			.followRedirects(HttpClient.Redirect.NORMAL)
-			.executor(EXECUTOR)
 			.build();
+
+	static final String BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
 
 	private ModrinthApi() {
 	}
@@ -247,6 +250,20 @@ public final class ModrinthApi {
 
 	// ------------------------------------------------------- any direct link
 
+	/** Blocking GET returning the body as text (call from a worker thread only). */
+	static String getTextBlocking(URI uri) throws IOException, InterruptedException {
+		HttpResponse<String> resp = HTTP.send(HttpRequest.newBuilder(uri)
+						.header("User-Agent", BROWSER_UA)
+						.header("Accept-Language", "en-US,en;q=0.9")
+						.timeout(Duration.ofSeconds(30))
+						.GET().build(),
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		if (resp.statusCode() != 200) {
+			throw new IOException("HTTP " + resp.statusCode());
+		}
+		return resp.body();
+	}
+
 	public record Fetched(Path file, String fileName, String contentType) {
 	}
 
@@ -255,7 +272,7 @@ public final class ModrinthApi {
 	/** Downloads any URL into a temp file (used for "Link einfügen"). */
 	public static CompletableFuture<Fetched> fetchToTemp(URI uri, LongConsumer progress, LongConsumer totalSize) {
 		HttpRequest req = HttpRequest.newBuilder(uri)
-				.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PackBrowser/" + PackBrowserClient.modVersion())
+				.header("User-Agent", BROWSER_UA)
 				.timeout(Duration.ofMinutes(10))
 				.GET()
 				.build();

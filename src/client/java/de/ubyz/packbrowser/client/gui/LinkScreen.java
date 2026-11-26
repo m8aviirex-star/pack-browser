@@ -61,7 +61,7 @@ public class LinkScreen extends BaseBrowserScreen {
 			this.showFlash(Component.translatable("packbrowser.link.empty").withStyle(ChatFormatting.RED));
 			return;
 		}
-		LinkImports.start(this.urlBox.getValue());
+		LinkImports.startAll(this.urlBox.getValue());
 		this.urlBox.setValue("");
 	}
 
@@ -102,22 +102,39 @@ public class LinkScreen extends BaseBrowserScreen {
 	private Component jobLine(LinkImports.Job job) {
 		String name = job.fileName.isEmpty() ? job.url : job.fileName;
 		return switch (job.phase) {
-			case DOWNLOADING -> {
-				String pct = job.total > 0 ? (job.done * 100 / job.total) + "%" : (job.done / 1024) + " KB";
-				yield Component.literal("⬇ " + pct + "  ").withStyle(ChatFormatting.YELLOW)
-						.append(Component.literal(name).withStyle(ChatFormatting.GRAY));
+			case DOWNLOADING, INSTALLING -> {
+				MutableComponent c = Component.empty();
+				if (job.folder) {
+					c.append(Component.translatable("packbrowser.link.folder", job.batchIndex, job.batchTotal)
+							.withStyle(ChatFormatting.AQUA)).append(" ");
+				}
+				if (job.phase == LinkImports.Phase.INSTALLING) {
+					c.append(Component.translatable("packbrowser.link.installing", name).withStyle(ChatFormatting.YELLOW));
+				} else {
+					int pct = job.percent();
+					String progress = job.batchTotal == 0 && job.folder ? "..." : pct >= 0 ? pct + "%" : (job.done / 1024) + " KB";
+					c.append(Component.literal("\u2B07 " + progress + "  ").withStyle(ChatFormatting.YELLOW))
+							.append(Component.literal(name).withStyle(ChatFormatting.GRAY));
+				}
+				yield c;
 			}
-			case INSTALLING -> Component.translatable("packbrowser.link.installing", name).withStyle(ChatFormatting.YELLOW);
 			case DONE -> {
-				MutableComponent c = Component.literal("✔ ").withStyle(ChatFormatting.GREEN)
-						.append(Component.literal(job.files.stream().map(PackInstaller::stripZip).collect(Collectors.joining(", ")))
-								.withStyle(ChatFormatting.WHITE));
+				MutableComponent c = Component.literal("\u2714 ").withStyle(ChatFormatting.GREEN);
+				if (job.folder) {
+					c.append(Component.translatable("packbrowser.link.folderDone", job.files.size()).withStyle(ChatFormatting.GREEN));
+					if (job.failed > 0 || job.skipped > 0) {
+						c.append(Component.translatable("packbrowser.link.folderExtra", job.skipped, job.failed).withStyle(ChatFormatting.GOLD));
+					}
+					c.append(" ");
+				}
+				c.append(Component.literal(job.files.stream().map(PackInstaller::stripZip).collect(Collectors.joining(", ")))
+						.withStyle(ChatFormatting.WHITE));
 				if (job.alreadyPresent) {
 					c.append(Component.translatable("packbrowser.link.present").withStyle(ChatFormatting.YELLOW));
 				}
 				yield c;
 			}
-			case FAILED -> Component.literal("✖ " + job.error).withStyle(ChatFormatting.RED);
+			case FAILED -> Component.literal("\u2716 " + job.error).withStyle(ChatFormatting.RED);
 		};
 	}
 

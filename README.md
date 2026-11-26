@@ -10,13 +10,15 @@ Durchsuche Texturepacks von [Modrinth](https://modrinth.com/resourcepacks) direk
 Packs von Modrinth suchen, filtern (Version, Sortierung, Kategorie/Auflösung) und mit **Herunterladen** oder Doppelklick direkt in `resourcepacks` laden. Jeder Download wird per SHA-1 geprüft.
 
 ### Aus Downloads
-Für Seiten mit Download-Knopf (PvPRP, Planet Minecraft, CurseForge, MediaFire …): Pack ganz normal im Browser runterladen, er taucht hier automatisch auf. Doppelklick = importieren.
+Für Seiten mit Download-Knopf (PvPRP, Planet Minecraft, CurseForge …): Pack ganz normal im Browser runterladen, er taucht hier automatisch auf. Doppelklick = importieren.
 - Zeigt Bild, Beschreibung und für welche Minecraft-Version der Pack gemacht ist (alte 1.8-Packs werden markiert).
 - ZIPs mit mehreren Packs oder einem Unterordner werden automatisch richtig entpackt.
 - Der Ordner ist einstellbar (Standard: dein Downloads-Ordner).
 
 ### Link einfügen
-Direkten Download-Link einfügen und Enter drücken. Klappt mit GitHub, Dropbox, Google Drive, Discord und allen Links, die direkt eine .zip laden.
+Download-Link einfügen und Enter drücken (auch mehrere Links auf einmal).
+- **MediaFire**: Datei-Links und ganze **Ordner** – alle ZIPs im Ordner (inkl. Unterordner) werden nacheinander geladen.
+- GitHub, Dropbox, Google Drive, Discord und alle Links, die direkt eine .zip laden.
 
 Danach mit **Fertig** zurück und den Pack links in der Liste aktivieren.
 
