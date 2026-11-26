@@ -4,6 +4,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -26,3 +29,24 @@ jobs:
         with:
           name: pack-browser
           path: build/libs/
+      - name: publish jar to dist branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p /tmp/dist
+          cp build/libs/*.jar /tmp/dist/
+          cd /tmp/dist
+          git init -q -b dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Build ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" dist
+      - name: update release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest -y --cleanup-tag || true
+          gh release create latest build/libs/*.jar --target "$GITHUB_SHA" --latest \
+            --title "Pack Browser – neuester Build" \
+            --notes "Fabric-Mod für Minecraft 26.3. Die .jar in den mods-Ordner legen (Fabric Loader nötig, Fabric API nicht)."
