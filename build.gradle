@@ -20,7 +20,9 @@ loom {
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	// Only the two Fabric API modules we need, bundled into the jar (full Fabric API not required)
+	implementation include(fabricApi.module("fabric-api-base", project.fabric_api_version))
+	implementation include(fabricApi.module("fabric-screen-api-v1", project.fabric_api_version))
 
 	// Pure-Java WebP decoder for Modrinth icons (bundled into the mod jar)
 	def tm = project.twelvemonkeys_version

@@ -18,7 +18,7 @@ Durchsuche Texturepacks von [Modrinth](https://modrinth.com/resourcepacks) direk
 ## Voraussetzungen
 
 - Minecraft **26.3** mit **Fabric Loader ≥ 0.20.1**
-- **Fabric API**
+- Fabric API ist **nicht** nötig (die benötigten Teile sind in der Jar enthalten)
 - Java 25
 
 ## Bauen
