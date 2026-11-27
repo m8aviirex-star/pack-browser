@@ -4,7 +4,7 @@ Durchsuche Texturepacks von [Modrinth](https://modrinth.com/resourcepacks) direk
 
 ## Benutzung
 
-**Optionen → Ressourcenpakete** öffnen und oben links auf **Pack Browser** klicken. Oben gibt es drei Tabs:
+**Optionen → Ressourcenpakete** öffnen und auf **Pack Browser** klicken (oben rechts oder links – je nachdem, wo Platz ist; funktioniert auch mit Mods, die das Ressourcenpaket-Menü ersetzen). Alternativ: der kleine **⬇**-Knopf direkt neben „Ressourcenpakete …“ im Optionsmenü. Oben gibt es drei Tabs:
 
 ### Modrinth
 Packs von Modrinth suchen, filtern (Version, Sortierung, Kategorie/Auflösung) und mit **Herunterladen** oder Doppelklick direkt in `resourcepacks` laden. Jeder Download wird per SHA-1 geprüft.
